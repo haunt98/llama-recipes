@@ -16,6 +16,8 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         req = json.loads(self.rfile.read(length) or b"{}")
 
+        print(f"[{self.client_address[0]}] POST /infill filename={req.get('filename', 'current_file')} prefix_len={len(req.get('input_prefix', ''))} suffix_len={len(req.get('input_suffix', ''))}")
+
         prefix = req.get("input_prefix", "")
         middle = req.get("prompt", "")
         suffix = req.get("input_suffix", "")
