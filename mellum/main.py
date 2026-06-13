@@ -26,66 +26,56 @@ class Handler(BaseHTTPRequestHandler):
         # Upstream example
         # llama-cli -m mellum-4b-dpo-all.Q8_0.gguf --temp 0 -p $'<filename>Utils.kt\npackage utils\n\nfun multiply(x: Int, y: Int): Int {\n    return x * y\n}\n\n<filename>Config.kt\npackage config\n\nobject Config {\n    const val DEBUG = true\n    const val MAX_VALUE = 100\n}\n\n<filename>Example.kt\n<fim_suffix>\nfun main() {\n    val result = calculateSum(5, 10)\n    println(result)\n}\n<fim_prefix>fun calculateSum(a: Int, b: Int): Int {\n<fim_middle>'
 
-        prefix = req.get("input_prefix", "")
-        middle = req.get("prompt", "")
-        suffix = req.get("input_suffix", "")
-        filename = req.get("filename", "")
+        prefix = req.get("input_prefix")
+        middle = req.get("prompt")
+        suffix = req.get("input_suffix")
 
         parts = []
 
         for item in req.get("input_extra", []) or []:
-            name = item.get("filename", "")
-            text = item.get("text", "")
-            if name or text:
-                parts.append(f"<filename>{name}\n{text}\n\n")
+            filename = item.get("filename")
+            text = item.get("text")
+            if filename or text:
+                parts.append(f"<filename>{filename}\n{text}\n\n")
 
-        parts.append(f"<filename>{filename}\n")
         parts.append(f"<fim_suffix>{suffix}")
-        parts.append(f"<fim_prefix>{prefix}{middle}")
-        parts.append("<fim_middle>")
+        parts.append(f"<fim_prefix>{prefix}")
+        parts.append(f"<fim_middle>{middle}")
 
-        body = {
+        new_req = {
             "prompt": "".join(parts),
-            "n_predict": req.get("n_predict", 64),
-            "temperature": 0,
-            "top_k": req.get("top_k", 40),
-            "top_p": req.get("top_p", 0.99),
-            "stop": req.get("stop")
-            or [
-                "<fim_prefix>",
-                "<fim_suffix>",
-                "<fim_middle>",
-                "<filename>",
-                "<|endoftext|>",
-            ],
-            "cache_prompt": True,
+            "temperature": req.get("temperature"),
+            "top_k": req.get("top_k"),
+            "top_p": req.get("top_p"),
+            "n_predict": req.get("n_predict"),
+            "n_indent": req.get("n_indent"),
+            "n_cmpl": req.get("n_cmpl"),
             "stream": False,
-            "penalize_nl": False,
-            "t_max_predict_ms": req.get("t_max_predict_ms", 1000),
-            "response_fields": ["content"],
+            "stop": req.get("stop"),
+            "t_max_prompt_ms": req.get("t_max_prompt_ms"),
+            "t_max_predict_ms": req.get("t_max_predict_ms"),
+            "id_slot": req.get("id_slot"),
+            "cache_prompt": True,
+            "response_fields": req.get("response_fields"),
         }
 
-        data = json.dumps(body).encode()
-
         try:
-            resp = requests.post(
+            rsp = requests.post(
                 UPSTREAM_URL,
-                data=data,
-                headers={"Content-Type": "application/json"},
-                timeout=10,
+                json=new_req,
             )
-            out = resp.content
-            status = resp.status_code
+
+            console.log(UPSTREAM_URL, rsp.status_code, rsp.content)
         except Exception as e:
             console.log(e)
 
             self.send_error(502)
             return
 
-        self.send_response(status)
+        self.send_response(rsp.status_code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(out)
+        self.wfile.write(rsp.content)
 
 
 if __name__ == "__main__":
