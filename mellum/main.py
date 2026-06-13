@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
-import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-UPSTREAM = "http://127.0.0.1:8012/completion"
+import requests
+from rich.console import Console
+
+console = Console()
+
+# https://github.com/ggml-org/llama.cpp/tree/master/tools/server
+UPSTREAM_URL = "http://127.0.0.1:8012/completion"
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        req = json.loads(self.rfile.read(length) or b"{}")
+
+        console.log(self.path, req)
+
         if self.path != "/infill":
             self.send_error(404)
             return
 
-        length = int(self.headers.get("Content-Length", "0"))
-        req = json.loads(self.rfile.read(length) or b"{}")
-
-        print(f"[{self.client_address[0]}] POST /infill filename={req.get('filename', 'current_file')} prefix_len={len(req.get('input_prefix', ''))} suffix_len={len(req.get('input_suffix', ''))}")
+        # Upstream example
+        # llama-cli -m mellum-4b-dpo-all.Q8_0.gguf --temp 0 -p $'<filename>Utils.kt\npackage utils\n\nfun multiply(x: Int, y: Int): Int {\n    return x * y\n}\n\n<filename>Config.kt\npackage config\n\nobject Config {\n    const val DEBUG = true\n    const val MAX_VALUE = 100\n}\n\n<filename>Example.kt\n<fim_suffix>\nfun main() {\n    val result = calculateSum(5, 10)\n    println(result)\n}\n<fim_prefix>fun calculateSum(a: Int, b: Int): Int {\n<fim_middle>'
 
         prefix = req.get("input_prefix", "")
         middle = req.get("prompt", "")
         suffix = req.get("input_suffix", "")
-        filename = req.get("filename", "current_file")
+        filename = req.get("filename", "")
 
         parts = []
 
@@ -42,7 +50,8 @@ class Handler(BaseHTTPRequestHandler):
             "temperature": 0,
             "top_k": req.get("top_k", 40),
             "top_p": req.get("top_p", 0.99),
-            "stop": req.get("stop") or [
+            "stop": req.get("stop")
+            or [
                 "<fim_prefix>",
                 "<fim_suffix>",
                 "<fim_middle>",
@@ -59,31 +68,24 @@ class Handler(BaseHTTPRequestHandler):
         data = json.dumps(body).encode()
 
         try:
-            upstream_req = urllib.request.Request(
-                UPSTREAM,
+            resp = requests.post(
+                UPSTREAM_URL,
                 data=data,
                 headers={"Content-Type": "application/json"},
-                method="POST",
+                timeout=10,
             )
-            with urllib.request.urlopen(upstream_req, timeout=10) as resp:
-                out = resp.read()
-                status = resp.status
+            out = resp.content
+            status = resp.status_code
         except Exception as e:
-            status = 502
-            out = json.dumps({
-                "error": {
-                    "message": str(e),
-                    "type": "adapter_error",
-                }
-            }).encode()
+            console.log(e)
+
+            self.send_error(502)
+            return
 
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(out)
-
-    def log_message(self, *_):
-        return
 
 
 if __name__ == "__main__":
