@@ -3,5 +3,7 @@
 llama-server \
     -hf JetBrains/Mellum-4b-dpo-all-gguf:Q8_0 \
     --port 8012 \
-    --ctx-size 0 \
-    --cache-reuse 256
+    --ctx-size 4096 \
+    --cache-reuse 256 \
+    --batch-size 1024 \
+    --ubatch-size 1024
