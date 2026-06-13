@@ -39,8 +39,8 @@ class Handler(BaseHTTPRequestHandler):
                 parts.append(f"<filename>{filename}\n{text}\n\n")
 
         parts.append(f"<fim_suffix>{suffix}")
-        parts.append(f"<fim_prefix>{prefix}")
-        parts.append(f"<fim_middle>{middle}")
+        parts.append(f"<fim_prefix>{prefix}{middle}")
+        parts.append("<fim_middle>")
 
         new_req = {
             "prompt": "".join(parts),
